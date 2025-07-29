@@ -62,9 +62,15 @@ run t = if validate t then Just (reduce t) else Nothing
 true = Lambda $ Lambda $ Var 1
 false = Lambda $ Lambda $ Var 0
 
+zero = true
+suc x = Lambda $ Lambda $ App (Var 0) x
+
 pair a b = Lambda $ App (App (Var 0) a) b
 cons h t = Lambda $ Lambda $ App (App (Var 1) h) t
 nil = Lambda $ Lambda $ Var 0
+
+
+
 
 list :: [EAL] -> EAL
 list = foldr cons nil
@@ -77,15 +83,15 @@ unList :: EAL -> [EAL]
 unList (Lambda (Lambda (Var 0))) = []
 unList (Lambda (Lambda ( App (App (Var 1) h) t))) = h : unList t
 
-int 0 = list [false]
-int 1 = list [true]
-int n = cons (if even n then false else true) (int (n `div` 2))
+-- int 0 = list [false]
+-- int 1 = list [true]
+-- int n = cons (if even n then false else true) (int (n `div` 2))
 
-list2Int :: [EAL] -> Int
-list2Int [] = 0
-list2Int (h:t) = if h == true then 2  * list2Int t + 1 else 2 * list2Int t
+-- list2Int :: [EAL] -> Int
+-- list2Int [] = 0
+-- list2Int (h:t) = if h == true then 2  * list2Int t + 1 else 2 * list2Int t
 
-unInt x = list2Int $ unList x 
+-- unInt x = list2Int $ unList x 
 
 
 
@@ -93,10 +99,10 @@ unInt x = list2Int $ unList x
 ls xs = pair (int 0) (list xs)
 pr x y = pair (int 1) (pair x y)
 chr c = pair (int 2) (int (fromEnum c))
-i n = pair (int 3) (int n)
 b b = pair (int 4) (if b then true else false)
+suc = pair (int 6)
 nat 0 = pair (int 5) nil
-nat n = pair (int 6) (nat (n-1))
+nat n = suc (nat (n-1))
 
 
 fmt :: [String] -> EAL -> String
@@ -127,14 +133,27 @@ fmt ctx (Var n) = ctx !! n
 instance Show EAL where show = fmt []
 
 
+
+
+
+
+matchNat z s = 
+
+
+
+
 main :: IO()
 main = do
   print form
   where
     form =
-      Lambda $
-      Lambda $
-      ls [Var 1, i 2, i 3, Lambda $ Var 0]
+      -- Lambda $
+      -- Lambda $
+      -- ls [Var 1, i 2, i 3, Lambda $ Var 0]
+      -- suc $ i 0
+      suc $ nat 2
+
+
 
 
 
