@@ -104,8 +104,16 @@ natMatch x z s =
 
 
 
+selfapp = Lambda $ Let (Var 0) $ Box $ App (Var 0) (Var 0)
 
 
+ycomb = Lambda $ Let (Var 0) $ Box $ App
+  (Lambda $ App (Var 1) $ Let (Var 0) $ Box (App (Var 0) (Var 0)))
+  (Lambda $ App (Var 1) $ Let (Var 0) $ Box (App (Var 0) (Var 0)))
+
+
+
+-- ycomb = λf. let #g = f in #((λx. (#g let #h = x in #(h h))) (λx. (#g let #h = x in #(h h))))
 
 
 n0 = mkNat 0
@@ -115,8 +123,9 @@ n2 = mkNat 2
 main :: IO ()
 main = do
   print
-  $ run
-  $ natMatch n2 n0 n1
+  -- $ run
+  $ validate
+  $ ycomb
 
 
 
