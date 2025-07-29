@@ -5,6 +5,7 @@ data EAL
   | App EAL EAL
   | Box EAL
   | Let EAL EAL
+  deriving (Eq)
 
 reduce :: EAL -> EAL
 reduce (Var n) = Var n
@@ -44,13 +45,6 @@ checkBox (Box t) b i = checkBox t (b-1) i
 checkBox (Let t1 t2) b i = checkBox t1 b i && checkBox t2 b (i+1)
 
 
-instance Eq EAL where
-  (Var n) == (Var n') = n == n'
-  (App t1 t2) == (App t1' t2') = t1 == t1' && t2 == t2'
-  (Lambda t) == (Lambda t') = t == t'
-  (Box t) == (Box t') = t == t'
-  (Let t1 t2) == (Let t1' t2') = t1 == t1' && t2 == t2'
-  _ == _ = False
 
 run :: EAL -> Maybe EAL
 run t = if validate t then Just (reduce t) else Nothing
@@ -103,12 +97,26 @@ rep ctx (Var n) = ctx !! n
 instance Show EAL where show = fmt []
 
 
+natMatch :: EAL -> EAL -> EAL -> EAL
+natMatch x z s =
+  App x $ App s z
 
 
+
+
+
+
+
+
+n0 = mkNat 0
+n1 = mkNat 1
+n2 = mkNat 2
 
 main :: IO ()
 main = do
-  print $ mkList [true, suc zero]
+  print
+  $ run
+  $ natMatch n2 n0 n1
 
 
 
