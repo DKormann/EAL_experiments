@@ -44,8 +44,6 @@ checkBox (Box t) b i = checkBox t (b-1) i
 checkBox (Let t1 t2) b i = checkBox t1 b i && checkBox t2 b (i+1)
 
 
-
-
 instance Eq EAL where
   (Var n) == (Var n') = n == n'
   (App t1 t2) == (App t1' t2') = t1 == t1' && t2 == t2'
@@ -62,117 +60,54 @@ run t = if validate t then Just (reduce t) else Nothing
 true = Lambda $ Lambda $ Var 1
 false = Lambda $ Lambda $ Var 0
 
-zero = true
-suc x = Lambda $ Lambda $ App (Var 0) x
-
+zero = false
+suc x = Lambda $ Lambda $ App (Var 1) x
 pair a b = Lambda $ App (App (Var 0) a) b
-cons h t = Lambda $ Lambda $ App (App (Var 1) h) t
-nil = Lambda $ Lambda $ Var 0
 
 
+nil = zero
+mkList :: [EAL] -> EAL
+mkList = foldr pair nil
 
+mkNat 0 = zero
+mkNat n = suc (mkNat (n-1))
 
-list :: [EAL] -> EAL
-list = foldr cons nil
+fmtNat :: EAL -> Maybe Int
+fmtNat (Lambda (Lambda (Var 0))) = Just 0
+fmtNat (Lambda (Lambda (App (Var 1) x))) = case fmtNat x of Just n -> Just (n+1); _ -> Nothing 
+fmtNat _ = Nothing 
 
-unPair :: EAL -> (EAL, EAL)
-unPair (Lambda ( App (App (Var 0) h) t)) = (h, t)
-unPair _ = error "unPair: invalid input"
-
-unList :: EAL -> [EAL]
-unList (Lambda (Lambda (Var 0))) = []
-unList (Lambda (Lambda ( App (App (Var 1) h) t))) = h : unList t
-
--- int 0 = list [false]
--- int 1 = list [true]
--- int n = cons (if even n then false else true) (int (n `div` 2))
-
--- list2Int :: [EAL] -> Int
--- list2Int [] = 0
--- list2Int (h:t) = if h == true then 2  * list2Int t + 1 else 2 * list2Int t
-
--- unInt x = list2Int $ unList x 
-
-
-
--- higher level data structures
-ls xs = pair (int 0) (list xs)
-pr x y = pair (int 1) (pair x y)
-chr c = pair (int 2) (int (fromEnum c))
-b b = pair (int 4) (if b then true else false)
-suc = pair (int 6)
-nat 0 = pair (int 5) nil
-nat n = suc (nat (n-1))
+fmtTuple :: EAL -> Maybe [EAL]
+fmtTuple (Lambda (Lambda (Var 0))) = Just []
+fmtTuple (Lambda (App( App (Var 0) x) tail)) = case fmtTuple tail of Just xs -> Just (x:xs); _ -> Nothing 
+fmtTuple _ = Nothing 
 
 
 fmt :: [String] -> EAL -> String
-fmt ctx (Lambda ( App (App (Var 0) n) dat)) = let tag = unInt n in case tag of
-  0 ->
-    let xs = unList dat in
-    "[" ++ unwords (map (fmt ctx) xs) ++ "]"
-  1 -> let (a,b) = unPair dat in "(" ++ fmt ctx a ++ ", " ++ fmt ctx b ++ ")"
-  2 -> [toEnum $ unInt dat]
-  3 -> show (unInt dat)
-  4 -> show (dat == true)
-  5 -> "0n"
-  6 -> let unnat x =
-            let (n, rest) = unPair x
-            in if unInt n == 5 then 1 else 1 + unnat rest
-        in show (unnat dat) ++ "n"
-  7 -> fmt ctx dat
-  _ -> "<unknown>"
+fmt ctx (Lambda (Lambda (Var 1))) = "T"
+fmt ctx (Lambda (Lambda (Var 0))) = "0"
+fmt ctx (Lambda (Lambda (App (Var 1) x))) = case fmtNat x of Just n -> show (n+1); _ -> rep ctx (Lambda (Lambda (App (Var 1) x)))
+fmt ctx (Lambda (App (App (Var 0) a) b)) = case fmtTuple b of Just xs -> show xs; _ -> rep ctx (Lambda (App (App (Var 0) a) b))
+fmt ctx x = rep ctx x
 
-fmt ctx (Lambda bod) = "λ" ++ v ++ "." ++ fmt (v:ctx) bod
+
+rep :: [String] -> EAL -> String
+rep ctx (Lambda bod) = "λ" ++ v ++ "." ++ fmt (v:ctx) bod
   where v = [toEnum (fromEnum 'a' + length ctx)]
-fmt ctx (App t1 t2) = "(" ++ fmt ctx t1 ++ " " ++ fmt ctx t2 ++ ")"
-fmt ctx (Box t) = "Box " ++ fmt ctx t
-fmt ctx (Let t1 t2) = "Let " ++ fmt ctx t1 ++ " in " ++ fmt (v:ctx) t2
+rep ctx (App t1 t2) = "(" ++ fmt ctx t1 ++ " " ++ fmt ctx t2 ++ ")"
+rep ctx (Box t) = "Box " ++ fmt ctx t
+rep ctx (Let t1 t2) = "Let " ++ fmt ctx t1 ++ " in " ++ fmt (v:ctx) t2
   where v = [toEnum (fromEnum 'a' + length ctx)]
-fmt ctx (Var n) = ctx !! n
+rep ctx (Var n) = ctx !! n
 
 instance Show EAL where show = fmt []
 
 
 
+main :: IO ()
+main = print $ fmtTuple $ mkList [true, suc zero]
 
 
-
-matchNat z s = 
-
-
-
-
-main :: IO()
-main = do
-  print form
-  where
-    form =
-      -- Lambda $
-      -- Lambda $
-      -- ls [Var 1, i 2, i 3, Lambda $ Var 0]
-      -- suc $ i 0
-      suc $ nat 2
-
-
-
-
-
-testvalidate :: EAL -> Bool -> String
-testvalidate t expected = if validate t == expected then "Valid" else "Invalid: " ++ show t
-
-
--- main :: IO ()
--- main = print $ map (uncurry testvalidate) [
---   (Var 0, True),
---   (Lambda $ Var 0, True),
---   (Lambda $ App (Var 0) (Var 0), False),
---   (Lambda $ Let (Var 0) $ App (Var 0) (Var 0), False),
---   (Lambda $ Let (Var 0) $ Box $ App (Var 0) (Var 0), True),
---   (Lambda $ Let (Var 0) $ App (Box $ Var 0) (Var 7), True),
---   (Lambda $ Let (Var 0) (Box $ App (Var 0) (Var 7)), True),
---   (Lambda $ Let (Var 0) (Box $ App (Box $ Var 0) (Var 7)), False),
---   (Lambda $ Let (Var 0) $ App (Var 0) (Var 7), False)
---   ]
 
 
 
