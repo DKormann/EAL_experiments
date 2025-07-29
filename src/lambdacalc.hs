@@ -87,7 +87,7 @@ fmt :: [String] -> EAL -> String
 fmt ctx (Lambda (Lambda (Var 1))) = "T"
 fmt ctx (Lambda (Lambda (Var 0))) = "0"
 fmt ctx (Lambda (Lambda (App (Var 1) x))) = case fmtNat x of Just n -> show (n+1); _ -> rep ctx (Lambda (Lambda (App (Var 1) x)))
-fmt ctx (Lambda (App (App (Var 0) a) b)) = case fmtTuple b of Just xs -> show xs; _ -> rep ctx (Lambda (App (App (Var 0) a) b))
+fmt ctx (Lambda (App (App (Var 0) a) b)) = case fmtTuple b of Just xs -> show (a:xs); _ -> rep ctx (Lambda (App (App (Var 0) a) b))
 fmt ctx x = rep ctx x
 
 
@@ -104,8 +104,11 @@ instance Show EAL where show = fmt []
 
 
 
+
+
 main :: IO ()
-main = print $ fmtTuple $ mkList [true, suc zero]
+main = do
+  print $ mkList [true, suc zero]
 
 
 
