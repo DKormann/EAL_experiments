@@ -14,7 +14,11 @@ reduce (App t1 t2) = case (reduce t1, reduce t2) of
   (t1', t2') -> App t1' t2'
 reduce (Lambda t) = Lambda (reduce t)
 reduce (Box t) = Box (reduce t)
-reduce (Let t1 t2) = reduce (sub t2 0 t1)
+
+reduce (Let t1 t2) = case reduce t1 of
+  Box t1' -> reduce (sub t2 0 t1')
+  t1' -> Let t1' $ reduce t2
+  
 
 sub :: EAL -> Int -> EAL -> EAL
 sub (Var n) i t = if n == i then t else Var n
@@ -89,9 +93,9 @@ rep :: [String] -> EAL -> String
 rep ctx (Lambda bod) = "λ" ++ v ++ "." ++ fmt (v:ctx) bod
   where v = [toEnum (fromEnum 'a' + length ctx)]
 rep ctx (App t1 t2) = "(" ++ fmt ctx t1 ++ " " ++ fmt ctx t2 ++ ")"
-rep ctx (Box t) = "Box " ++ fmt ctx t
-rep ctx (Let t1 t2) = "Let " ++ fmt ctx t1 ++ " in " ++ fmt (v:ctx) t2
-  where v = [toEnum (fromEnum 'a' + length ctx)]
+rep ctx (Box t) = "#" ++ fmt ctx t
+rep ctx (Let t1 t2) = " let #"++ v ++ " = " ++ fmt ctx t1 ++ " in " ++ fmt (v:ctx) t2
+  where v = [toEnum (fromEnum 'a' + length ctx - 33)]
 rep ctx (Var n) = ctx !! n
 
 instance Show EAL where show = fmt []
@@ -113,7 +117,6 @@ ycomb = Lambda $ Let (Var 0) $ Box $ App
 
 
 
--- ycomb = λf. let #g = f in #((λx. (#g let #h = x in #(h h))) (λx. (#g let #h = x in #(h h))))
 
 
 n0 = mkNat 0
@@ -123,8 +126,7 @@ n2 = mkNat 2
 main :: IO ()
 main = do
   print
-  -- $ run
-  $ validate
+  $ run
   $ ycomb
 
 
