@@ -43,17 +43,8 @@ checkBox (Lambda t) b i = checkBox t b (i+1)
 checkBox (Box t) b i = checkBox t (b-1) i
 checkBox (Let t1 t2) b i = checkBox t1 b i && checkBox t2 b (i+1)
 
-rep :: EAL -> [String] -> String
-rep (Var n) ctx = ctx !! n
-rep (Lambda t) ctx = "λ" ++ v ++ "." ++ rep t (v : ctx)
-  where v = [toEnum (fromEnum 'a' + length ctx) :: Char]
-rep (App t1 t2) ctx = "(" ++ rep t1 ctx ++ " " ++ rep t2 ctx ++ ")"
-rep (Box t) ctx = "Box " ++ rep t ctx
-rep (Let t1 t2) ctx = "Let " ++ v ++ " = " ++ rep t1 ctx ++ " in " ++ rep t2 (v:ctx)
-  where v = [toEnum (fromEnum 'a' + length ctx) :: Char]
 
-instance Show EAL where
-  show t = rep t []
+
 
 instance Eq EAL where
   (Var n) == (Var n') = n == n'
@@ -63,15 +54,11 @@ instance Eq EAL where
   (Let t1 t2) == (Let t1' t2') = t1 == t1' && t2 == t2'
   _ == _ = False
 
-
-
-
-
 run :: EAL -> Maybe EAL
 run t = if validate t then Just (reduce t) else Nothing
 
 
-
+-- low level data structures
 true = Lambda $ Lambda $ Var 1
 false = Lambda $ Lambda $ Var 0
 
@@ -100,57 +87,23 @@ list2Int (h:t) = if h == true then 2  * list2Int t + 1 else 2 * list2Int t
 
 unInt x = list2Int $ unList x 
 
--- chr :: Char -> EAL
--- chr x = int (fromEnum x)
-
--- str :: String -> EAL
--- str s = list $ map chr s
-
--- fromChr :: EAL -> Char
--- fromChr x = toEnum . fromEnum $ x
 
 
-
-data Mydata
-  = Ls [Mydata]
-  | Pr (Mydata, Mydata)
-  | Chr Char
-  | I Int
-  | B Bool
-  | Nat Int
-  | V EAL
-
-
-instance Show Mydata where
-  show x = case x of
-    Ls xs -> show xs
-    Pr (x,y) -> "(" ++ show x ++ ", " ++ show y ++ ")"
-    Chr c -> show c
-    I n -> show n
-    B b -> show b
-    Nat n -> show n
-
-
-
-fromMydata :: Mydata -> EAL
-fromMydata x = pair tag dat
-  where
-    tag = int n
-    (n, dat) = case x of
-      Ls xs -> (0, list $ map fromMydata xs)
-      Pr (x,y) -> (1, pair (fromMydata x) (fromMydata y))
-      Chr c -> (2, int (fromEnum c))
-      I n -> (3, int n)
-      B b -> (4, if b then true else false)
-      Nat 0 -> (5, nil)
-      Nat x -> (6, fromMydata $ Nat (x-1))
-      V t -> (7, t)
-
+-- higher level data structures
+ls xs = pair (int 0) (list xs)
+pr x y = pair (int 1) (pair x y)
+chr c = pair (int 2) (int (fromEnum c))
+i n = pair (int 3) (int n)
+b b = pair (int 4) (if b then true else false)
+nat 0 = pair (int 5) nil
+nat n = pair (int 6) (nat (n-1))
 
 
 fmt :: [String] -> EAL -> String
 fmt ctx (Lambda ( App (App (Var 0) n) dat)) = let tag = unInt n in case tag of
-  0 -> "[" ++ show (map (fmt ctx) $ unList dat) ++ "]"
+  0 ->
+    let xs = unList dat in
+    "[" ++ unwords (map (fmt ctx) xs) ++ "]"
   1 -> let (a,b) = unPair dat in "(" ++ fmt ctx a ++ ", " ++ fmt ctx b ++ ")"
   2 -> [toEnum $ unInt dat]
   3 -> show (unInt dat)
@@ -161,6 +114,7 @@ fmt ctx (Lambda ( App (App (Var 0) n) dat)) = let tag = unInt n in case tag of
             in if unInt n == 5 then 1 else 1 + unnat rest
         in show (unnat dat) ++ "n"
   7 -> fmt ctx dat
+  _ -> "<unknown>"
 
 fmt ctx (Lambda bod) = "λ" ++ v ++ "." ++ fmt (v:ctx) bod
   where v = [toEnum (fromEnum 'a' + length ctx)]
@@ -168,29 +122,19 @@ fmt ctx (App t1 t2) = "(" ++ fmt ctx t1 ++ " " ++ fmt ctx t2 ++ ")"
 fmt ctx (Box t) = "Box " ++ fmt ctx t
 fmt ctx (Let t1 t2) = "Let " ++ fmt ctx t1 ++ " in " ++ fmt (v:ctx) t2
   where v = [toEnum (fromEnum 'a' + length ctx)]
+fmt ctx (Var n) = ctx !! n
 
-
+instance Show EAL where show = fmt []
 
 
 main :: IO()
 main = do
-  -- print form
-  putStrLn $ fmt [] form
-  -- print $ unInt form
-
-
+  print form
   where
-    
     form =
-      -- Lambda $ Let (Var 0) $ Box $ App (Var 0) (Var 0)
-      -- int 0
-      -- pair true false
       Lambda $
-      fromMydata
-        -- ((Ls [I 1, I 2, I 3]))
-        (Nat 4)
-        -- (Ls[Chr 'a', Chr 'b', Chr 'c'])
-
+      Lambda $
+      ls [Var 1, i 2, i 3, Lambda $ Var 0]
 
 
 
