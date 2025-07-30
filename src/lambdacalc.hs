@@ -28,19 +28,15 @@ mapc i f (Box t) = Box (f i t)
 mapc i f (Let t1 t2) = Let (f i t1) (f (i + 1) t2)
 
 
+logi :: Int -> String -> Show a => a -> a
+logi i msg x = trace (replicate (i*2) ' ' ++ msg ++ ":" ++ show x) x
+
+
+
+
 reduceI :: Int -> EAL -> EAL
 reduceI i (App t1 t2) = case (reduceI i t1, reduceI i t2) of
-  (Lambda body, t2') ->
-    -- let ws = repeat " " i
-    let ws = replicate (i*2) ' '
-    in
-      trace (ws ++ "app:" ++ show (Lambda body) ++ " | " ++ show t2')
-      (let subed = sub body 0 t2'
-      in trace (ws ++ "sub:" ++ show subed)
-        (let res = reduceI i subed
-        in
-          trace (ws ++ "res:" ++ show res)
-          res))
+  (Lambda body, t2') -> reduceI (i+1) $ sub body 0 t2'
   (t1', t2') -> App t1' t2'
 reduceI i (Let t1 t2) = case reduceI i t1 of
   Box t1' -> reduceI i (sub t2 0 t1')
@@ -50,14 +46,13 @@ reduceI i e = mapc i reduceI e
 
 reduce = reduceI 0
 
-  
+shift :: Int -> Int -> EAL -> EAL
+shift i n (Var k) = Var (if k >= i then k + n else k)
+shift i n e = mapc i (`shift` n ) e
 
--- sub :: EAL -> Int -> EAL -> EAL
--- sub (Var n) i t = if n == i then t else Var n
--- sub (App t1 t2) i t = App (sub t1 i t) (sub t2 i t)
--- sub (Lambda bod) i t = Lambda (sub bod (i+1) t)
--- sub (Box b) i t = Box (sub b i t)
--- sub (Let t1 body) i t = Let (sub t1 i t) (sub body (i+1) t)
+sub :: EAL -> Int -> EAL -> EAL
+sub (Var n) i t = if n == i then shift 0 i t else Var (if n >= i then n-1 else n)
+sub e i t = mapc i (\i e -> sub e i t) e
 
 validate :: EAL -> Bool
 validate term = fold 0 True (\i c d -> d && validate c) term && check term
@@ -75,13 +70,6 @@ checkBox (Var n) b i = (n /= i) || (b == 0)
 checkBox (Box t) b i = checkBox t (b-1) i
 checkBox x b i = fold i True (\i x c -> c && checkBox x b i) x
 
-run :: EAL -> Maybe EAL
-run t =
-  -- let t = = t
-  if validate t then Just (reduce t) else Nothing
-
-
-
 repV :: Int -> Int -> EAL -> EAL
 repV i n (Var k) = Var (if k == -n then i else k)
 repV i n x = mapc i (`repV` n) x
@@ -91,14 +79,13 @@ parseLamH i (Lam f) = Lambda $ repV 0 i $ parseLamH (i+1) $ f (Var (-i))
 parseLamH i (LetH bod f) = Let (parseLamH (i+1) bod) (repV 0 i $ parseLamH (i+1) $ f (Var (-i)))
 parseLamH i e = mapc i parseLamH e
 
-
 parse = parseLamH 1
-
 true = Lambda $ Lambda $ Var 1
 false = Lambda $ Lambda $ Var 0
 
 zero = false
 suc x = Lam $ \s -> Lam $ \z -> App s x
+-- suc x = Lambda $ Lambda $ App (Var 1) x
 pair a b = Lambda $ App (App (Var 0) a) b
 
 
@@ -107,7 +94,7 @@ mkList :: [EAL] -> EAL
 mkList = foldr pair nil
 
 mkNat 0 = zero
-mkNat n = suc (mkNat (n-1))
+mkNat n = Lambda $ Lambda $ App (Var 1) (mkNat (n-1))
 
 fmtNat :: EAL -> Maybe Int
 fmtNat (Lambda (Lambda (Var 0))) = Just 0
@@ -121,9 +108,9 @@ fmtTuple _ = Nothing
 
 
 fmt :: [String] -> EAL -> String
--- fmt ctx (Lambda (Lambda (Var 1))) = "T"
--- fmt ctx (Lambda (Lambda (Var 0))) = "0"
--- fmt ctx (Lambda (Lambda (App (Var 1) x))) = case fmtNat x of Just n -> show (n+1); _ -> rep ctx (Lambda (Lambda (App (Var 1) x)))
+fmt ctx (Lambda (Lambda (Var 1))) = "T"
+fmt ctx (Lambda (Lambda (Var 0))) = "0"
+fmt ctx (Lambda (Lambda (App (Var 1) x))) = case fmtNat x of Just n -> show (n+1); _ -> rep ctx (Lambda (Lambda (App (Var 1) x)))
 fmt ctx (Lambda (App (App (Var 0) a) b)) = case fmtTuple b of Just xs -> show (a:xs); _ -> rep ctx (Lambda (App (App (Var 0) a) b))
 fmt ctx x = rep ctx x
 
@@ -158,23 +145,27 @@ n3 = mkNat 3
 
 
 app2 f a = App (App f a)
+app3 f a b = App (app2 f a b)
 
 
-sub1 =
-  -- LamH $ \self ->
+addt =
+  Lam $ \self ->
   Lam $ \x ->
   Lam $ \y ->
-    app2 x (Lam (\p -> suc y)) y
+    app2 x
+      (Lam (\p -> suc $ app3 self self p y))
+      y
 
 
 main :: IO ()
 main = do
   print form
+  print $ validate form
   print $ reduce form
 
   where
-    fn = sub1
-    form = parse $ app2 fn n1 n1
+
+    form = parse $ app3 addt addt n3 n3
 
     -- form = parse $ App (Lam (\x -> Lam $ \y -> Lam $ \z -> x)) n0
 
