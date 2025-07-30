@@ -27,23 +27,37 @@ mapc i f (Lambda t) = Lambda (f (i + 1) t)
 mapc i f (Box t) = Box (f i t)
 mapc i f (Let t1 t2) = Let (f i t1) (f (i + 1) t2)
 
-reduce :: EAL -> EAL
-reduce (Var n) = Var n
-reduce (App t1 t2) = case (reduce t1, reduce t2) of
-  (Lambda body, t2') -> reduce (sub body 0 t2')
-  (t1', t2') -> App t1' t2'
-reduce (Lambda t) = Lambda (reduce t)
-reduce (Box t) = Box (reduce t)
-reduce (Let t1 t2) = case reduce t1 of
-  Box t1' -> reduce (sub t2 0 t1')
-  t1' -> Let t1' $ reduce t2
 
-sub :: EAL -> Int -> EAL -> EAL
-sub (Var n) i t = if n == i then t else Var n
-sub (App t1 t2) i t = App (sub t1 i t) (sub t2 i t)
-sub (Lambda bod) i t = Lambda (sub bod (i+1) t)
-sub (Box b) i t = Box (sub b i t)
-sub (Let t1 body) i t = Let (sub t1 i t) (sub body (i+1) t)
+reduceI :: Int -> EAL -> EAL
+reduceI i (App t1 t2) = case (reduceI i t1, reduceI i t2) of
+  (Lambda body, t2') ->
+    -- let ws = repeat " " i
+    let ws = replicate (i*2) ' '
+    in
+      trace (ws ++ "app:" ++ show (Lambda body) ++ " | " ++ show t2')
+      (let subed = sub body 0 t2'
+      in trace (ws ++ "sub:" ++ show subed)
+        (let res = reduceI i subed
+        in
+          trace (ws ++ "res:" ++ show res)
+          res))
+  (t1', t2') -> App t1' t2'
+reduceI i (Let t1 t2) = case reduceI i t1 of
+  Box t1' -> reduceI i (sub t2 0 t1')
+  t1' -> Let t1' $ reduceI i t2
+reduceI i e = mapc i reduceI e
+
+
+reduce = reduceI 0
+
+  
+
+-- sub :: EAL -> Int -> EAL -> EAL
+-- sub (Var n) i t = if n == i then t else Var n
+-- sub (App t1 t2) i t = App (sub t1 i t) (sub t2 i t)
+-- sub (Lambda bod) i t = Lambda (sub bod (i+1) t)
+-- sub (Box b) i t = Box (sub b i t)
+-- sub (Let t1 body) i t = Let (sub t1 i t) (sub body (i+1) t)
 
 validate :: EAL -> Bool
 validate term = fold 0 True (\i c d -> d && validate c) term && check term
@@ -107,9 +121,9 @@ fmtTuple _ = Nothing
 
 
 fmt :: [String] -> EAL -> String
-fmt ctx (Lambda (Lambda (Var 1))) = "T"
-fmt ctx (Lambda (Lambda (Var 0))) = "0"
-fmt ctx (Lambda (Lambda (App (Var 1) x))) = case fmtNat x of Just n -> show (n+1); _ -> rep ctx (Lambda (Lambda (App (Var 1) x)))
+-- fmt ctx (Lambda (Lambda (Var 1))) = "T"
+-- fmt ctx (Lambda (Lambda (Var 0))) = "0"
+-- fmt ctx (Lambda (Lambda (App (Var 1) x))) = case fmtNat x of Just n -> show (n+1); _ -> rep ctx (Lambda (Lambda (App (Var 1) x)))
 fmt ctx (Lambda (App (App (Var 0) a) b)) = case fmtTuple b of Just xs -> show (a:xs); _ -> rep ctx (Lambda (App (App (Var 0) a) b))
 fmt ctx x = rep ctx x
 
@@ -121,7 +135,7 @@ rep ctx (App t1 t2) = "(" ++ fmt ctx t1 ++ " " ++ fmt ctx t2 ++ ")"
 rep ctx (Box t) = "#" ++ fmt ctx t
 rep ctx (Let t1 t2) = " let #"++ v ++ " = " ++ fmt ctx t1 ++ " in " ++ fmt (v:ctx) t2
   where v = [toEnum (fromEnum 'a' + length ctx)]
-rep ctx (Var n) =  if n>=0 && n < length ctx then ctx !! n else show n
+rep ctx (Var n) =  if n>=0 && n < length ctx then ctx !! n else "var"++show n
 rep ctx (LetH f n) = "LetH"
 rep ctx (Lam f) = "LamH"
 
@@ -155,12 +169,14 @@ sub1 =
 
 main :: IO ()
 main = do
-
+  print form
   print $ reduce form
 
   where
     fn = sub1
     form = parse $ app2 fn n1 n1
+
+    -- form = parse $ App (Lam (\x -> Lam $ \y -> Lam $ \z -> x)) n0
 
     
 
