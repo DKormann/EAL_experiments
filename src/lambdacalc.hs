@@ -1,3 +1,6 @@
+import Debug.Trace (trace)
+-- import Data.Map (Map, insert)
+-- import Data.Maybe (fromJust)
 
 data EAL
   = Var Int
@@ -5,7 +8,24 @@ data EAL
   | App EAL EAL
   | Box EAL
   | Let EAL EAL
-  deriving (Eq)
+  | Lam (EAL -> EAL)
+  | LetH EAL (EAL -> EAL)
+
+
+-- i is the nesting depth
+fold :: forall a . Int -> a -> (Int -> EAL -> a -> a) -> EAL -> a
+fold i d f (Var n) = d
+fold i d f (App t1 t2) = f i t1 (f i t2 d)
+fold i d f (Lambda t) = f (i + 1) t d
+fold i d f (Box t) = f i t d
+fold i d f (Let t1 t2) = f i t1 (fold (i + 1) d f t2)
+
+mapc :: Int -> (Int -> EAL -> EAL) -> EAL -> EAL
+mapc i f (Var n) = Var n
+mapc i f (App t1 t2) = App (f i t1) (f i t2)
+mapc i f (Lambda t) = Lambda (f (i + 1) t)
+mapc i f (Box t) = Box (f i t)
+mapc i f (Let t1 t2) = Let (f i t1) (f (i + 1) t2)
 
 reduce :: EAL -> EAL
 reduce (Var n) = Var n
@@ -14,11 +34,9 @@ reduce (App t1 t2) = case (reduce t1, reduce t2) of
   (t1', t2') -> App t1' t2'
 reduce (Lambda t) = Lambda (reduce t)
 reduce (Box t) = Box (reduce t)
-
 reduce (Let t1 t2) = case reduce t1 of
   Box t1' -> reduce (sub t2 0 t1')
   t1' -> Let t1' $ reduce t2
-  
 
 sub :: EAL -> Int -> EAL -> EAL
 sub (Var n) i t = if n == i then t else Var n
@@ -28,38 +46,45 @@ sub (Box b) i t = Box (sub b i t)
 sub (Let t1 body) i t = Let (sub t1 i t) (sub body (i+1) t)
 
 validate :: EAL -> Bool
-validate (Var n) = True
-validate (Lambda bod) = validate bod && (countVar 0 bod <= 1) && checkBox bod 0 0
-validate (App t1 t2) = validate t1 && validate t2
-validate (Box t) = validate t
-validate (Let t1 t2) = validate t1 && validate t2 && checkBox t2 1 0
+validate term = fold 0 True (\i c d -> d && validate c) term && check term
+  where
+    check (Lambda bod) = (countVar 0 bod <= 1) && checkBox bod 0 0
+    check (Let t1 t2) = checkBox t2 1 0
+    check _ = True
 
 countVar :: Int -> EAL -> Int
 countVar i (Var n) = if n == i then 1 else 0
-countVar i (App t1 t2) = countVar i t1 + countVar i t2
-countVar i (Lambda t) = countVar (i+1) t
-countVar i (Box t) = countVar i t
-countVar i (Let t1 t2) = countVar i t1 + countVar (i+1) t2
+countVar i x = fold i 0 (\i x c -> c + countVar i x) x
 
 checkBox :: EAL -> Int -> Int -> Bool
 checkBox (Var n) b i = (n /= i) || (b == 0)
-checkBox (App f a) b i = checkBox f b i && checkBox a b i
-checkBox (Lambda t) b i = checkBox t b (i+1)
 checkBox (Box t) b i = checkBox t (b-1) i
-checkBox (Let t1 t2) b i = checkBox t1 b i && checkBox t2 b (i+1)
-
-
+checkBox x b i = fold i True (\i x c -> c && checkBox x b i) x
 
 run :: EAL -> Maybe EAL
-run t = if validate t then Just (reduce t) else Nothing
+run t =
+  -- let t = = t
+  if validate t then Just (reduce t) else Nothing
 
 
--- low level data structures
+
+repV :: Int -> Int -> EAL -> EAL
+repV i n (Var k) = Var (if k == -n then i else k)
+repV i n x = mapc i (`repV` n) x
+
+parseLamH :: Int -> EAL -> EAL
+parseLamH i (Lam f) = Lambda $ repV 0 i $ parseLamH (i+1) $ f (Var (-i))
+parseLamH i (LetH bod f) = Let (parseLamH (i+1) bod) (repV 0 i $ parseLamH (i+1) $ f (Var (-i)))
+parseLamH i e = mapc i parseLamH e
+
+
+parse = parseLamH 1
+
 true = Lambda $ Lambda $ Var 1
 false = Lambda $ Lambda $ Var 0
 
 zero = false
-suc x = Lambda $ Lambda $ App (Var 1) x
+suc x = Lam $ \s -> Lam $ \z -> App s x
 pair a b = Lambda $ App (App (Var 0) a) b
 
 
@@ -72,13 +97,13 @@ mkNat n = suc (mkNat (n-1))
 
 fmtNat :: EAL -> Maybe Int
 fmtNat (Lambda (Lambda (Var 0))) = Just 0
-fmtNat (Lambda (Lambda (App (Var 1) x))) = case fmtNat x of Just n -> Just (n+1); _ -> Nothing 
-fmtNat _ = Nothing 
+fmtNat (Lambda (Lambda (App (Var 1) x))) = case fmtNat x of Just n -> Just (n+1); _ -> Nothing
+fmtNat _ = Nothing
 
 fmtTuple :: EAL -> Maybe [EAL]
 fmtTuple (Lambda (Lambda (Var 0))) = Just []
-fmtTuple (Lambda (App( App (Var 0) x) tail)) = case fmtTuple tail of Just xs -> Just (x:xs); _ -> Nothing 
-fmtTuple _ = Nothing 
+fmtTuple (Lambda (App( App (Var 0) x) tail)) = case fmtTuple tail of Just xs -> Just (x:xs); _ -> Nothing
+fmtTuple _ = Nothing
 
 
 fmt :: [String] -> EAL -> String
@@ -95,39 +120,49 @@ rep ctx (Lambda bod) = "λ" ++ v ++ "." ++ fmt (v:ctx) bod
 rep ctx (App t1 t2) = "(" ++ fmt ctx t1 ++ " " ++ fmt ctx t2 ++ ")"
 rep ctx (Box t) = "#" ++ fmt ctx t
 rep ctx (Let t1 t2) = " let #"++ v ++ " = " ++ fmt ctx t1 ++ " in " ++ fmt (v:ctx) t2
-  where v = [toEnum (fromEnum 'a' + length ctx - 33)]
-rep ctx (Var n) = ctx !! n
+  where v = [toEnum (fromEnum 'a' + length ctx)]
+rep ctx (Var n) =  if n>=0 && n < length ctx then ctx !! n else show n
+rep ctx (LetH f n) = "LetH"
+rep ctx (Lam f) = "LamH"
 
 instance Show EAL where show = fmt []
-
 
 natMatch :: EAL -> EAL -> EAL -> EAL
 natMatch x z s =
   App x $ App s z
 
-
-
-
-selfapp = Lambda $ Let (Var 0) $ Box $ App (Var 0) (Var 0)
-
-
 ycomb = Lambda $ Let (Var 0) $ Box $ App
   (Lambda $ App (Var 1) $ Let (Var 0) $ Box (App (Var 0) (Var 0)))
   (Lambda $ App (Var 1) $ Let (Var 0) $ Box (App (Var 0) (Var 0)))
 
-
-
-
-
 n0 = mkNat 0
 n1 = mkNat 1
 n2 = mkNat 2
+n3 = mkNat 3
+
+
+
+
+app2 f a = App (App f a)
+
+
+sub1 =
+  -- LamH $ \self ->
+  Lam $ \x ->
+  Lam $ \y ->
+    app2 x (Lam (\p -> suc y)) y
+
 
 main :: IO ()
 main = do
-  print
-  $ run
-  $ ycomb
+
+  print $ reduce form
+
+  where
+    fn = sub1
+    form = parse $ app2 fn n1 n1
+
+    
 
 
 
